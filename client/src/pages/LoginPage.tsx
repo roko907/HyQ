@@ -29,7 +29,7 @@ export default function LoginPage() {
   return (
     <div className="auth-page">
       <h1 className="auth-title">Welcome back</h1>
-      <p className="auth-subtitle">Log in to your StudyQ account</p>
+      <p className="auth-subtitle">Log in to your HyQ account</p>
       <div className="card">
         {error && <div className="error-msg">{error}</div>}
         <form onSubmit={handleSubmit}>

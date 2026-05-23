@@ -29,7 +29,7 @@ export default function RegisterPage() {
 
   return (
     <div className="auth-page">
-      <h1 className="auth-title">Join StudyQ</h1>
+      <h1 className="auth-title">Join HyQ</h1>
       <p className="auth-subtitle">Create your free account to start learning</p>
       <div className="card">
         {error && <div className="error-msg">{error}</div>}

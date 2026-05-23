@@ -1,4 +1,4 @@
-# StudyQ
+# HyQ
 
 A study Q&A app where friends can create accounts, ask questions, and help each other learn.
 

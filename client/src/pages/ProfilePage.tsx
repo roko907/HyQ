@@ -1,84 +1,235 @@
-import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
-import { api, Question } from '../lib/api';
-import { getUser, clearAuth } from '../lib/auth';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { api, User } from '../lib/api';
+import { getUser, setAuth, clearAuth } from '../lib/auth';
 
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
+function isBirthdayToday(birthdate: string | null | undefined): boolean {
+  if (!birthdate) return false;
+  const today = new Date();
+  const bd = new Date(birthdate);
+  return bd.getMonth() === today.getMonth() && bd.getDate() === today.getDate();
+}
+
+function formatBirthdate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${month}-${day}`;
 }
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const user = getUser();
+  const queryClient = useQueryClient();
+  const currentUser = getUser();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['my-questions', user?.id],
-    queryFn: async () => {
-      const res = await api.get('/questions', { params: { limit: 20 } });
-      const all = res.data as { questions: Question[] };
-      return all.questions.filter((q) => q.user_id === user?.id);
+  const [username, setUsername] = useState(currentUser?.username || '');
+  const [realName, setRealName] = useState(currentUser?.real_name || '');
+  const [birthdate, setBirthdate] = useState(formatBirthdate(currentUser?.birthdate));
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+
+  const isBirthday = isBirthdayToday(currentUser?.birthdate);
+
+  useEffect(() => {
+    api.get('/auth/me').then((res) => {
+      const u: User = res.data.user;
+      setUsername(u.username);
+      setRealName(u.real_name);
+      setBirthdate(formatBirthdate(u.birthdate));
+    }).catch(() => {});
+  }, []);
+
+  const updateMutation = useMutation({
+    mutationFn: async (payload: Record<string, string | undefined | null>) => {
+      const res = await api.put('/auth/profile', payload);
+      return res.data;
     },
-    enabled: !!user,
+    onSuccess: (data) => {
+      setAuth(data.token, data.user);
+      queryClient.invalidateQueries({ queryKey: ['questions'] });
+      setSuccess('Profile updated successfully!');
+      setError('');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setChangingPassword(false);
+      setTimeout(() => setSuccess(''), 3500);
+    },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { error?: string } } };
+      setError(e.response?.data?.error || 'Failed to update profile');
+      setSuccess('');
+    },
   });
+
+  function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    if (changingPassword) {
+      if (!currentPassword) return setError('Please enter your current password');
+      if (!newPassword) return setError('Please enter a new password');
+      if (newPassword.length < 6) return setError('New password must be at least 6 characters');
+      if (newPassword !== confirmPassword) return setError('Passwords do not match');
+    }
+
+    const payload: Record<string, string | undefined | null> = {
+      username,
+      real_name: realName,
+      birthdate: birthdate || null,
+    };
+    if (changingPassword) {
+      payload.current_password = currentPassword;
+      payload.new_password = newPassword;
+    }
+    updateMutation.mutate(payload);
+  }
 
   function handleLogout() {
     clearAuth();
     navigate('/login');
   }
 
-  if (!user) return null;
+  if (!currentUser) return null;
 
   return (
-    <div style={{ maxWidth: '700px', margin: '0 auto' }}>
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <div className="profile-header">
-          <div className="avatar">{user.username[0].toUpperCase()}</div>
+    <div style={{ maxWidth: '560px', margin: '0 auto' }}>
+      {isBirthday && (
+        <div className="birthday-banner">
+          <span className="birthday-emoji">🎂</span>
           <div>
-            <h1 style={{ fontSize: '1.4rem', fontWeight: 800 }}>{user.username}</h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{user.email}</p>
+            <div className="birthday-title">Happy Birthday, {currentUser.real_name}! 🎉</div>
+            <div className="birthday-sub">Wishing you a wonderful day!</div>
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <Link to="/ask" className="btn btn-primary btn-sm">Ask a Question</Link>
-          <button onClick={handleLogout} className="btn btn-outline btn-sm">Logout</button>
-        </div>
-      </div>
-
-      <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>My Questions</h2>
-
-      {isLoading ? (
-        <div className="spinner" />
-      ) : !data || data.length === 0 ? (
-        <div className="empty-state">
-          <h3>No questions yet</h3>
-          <p>You haven't asked any questions. Start learning!</p>
-          <Link to="/ask" className="btn btn-primary" style={{ marginTop: '1rem' }}>Ask First Question</Link>
-        </div>
-      ) : (
-        <div className="stack">
-          {data.map((q) => (
-            <Link to={`/questions/${q.id}`} key={q.id} className="question-card">
-              <div className="question-title">{q.title}</div>
-              <div className="question-meta">
-                <span className={`answer-count ${Number(q.answer_count) > 0 ? 'has-answers' : ''}`}>
-                  {q.answer_count} {Number(q.answer_count) === 1 ? 'answer' : 'answers'}
-                </span>
-                <span>{timeAgo(q.created_at)}</span>
-                {q.tags?.filter(Boolean).map((tag) => (
-                  <span key={tag} className="tag">{tag}</span>
-                ))}
-              </div>
-            </Link>
-          ))}
+          <span className="birthday-emoji">🎈</span>
         </div>
       )}
+
+      <div className="page-header">
+        <h1 className="page-title">My Profile</h1>
+      </div>
+
+      <div className="card">
+        <div className="profile-header" style={{ marginBottom: '1.5rem' }}>
+          <div className="avatar">{(username[0] || '?').toUpperCase()}</div>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: '1.2rem' }}>{realName || username}</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>@{username}</div>
+            {currentUser.is_admin && <span className="admin-badge" style={{ marginTop: '0.25rem', display: 'inline-block' }}>Admin</span>}
+          </div>
+        </div>
+
+        {success && <div className="success-msg">{success}</div>}
+        {error && <div className="error-msg">{error}</div>}
+
+        <form onSubmit={handleSave}>
+          <div className="form-group">
+            <label className="form-label">Real Name</label>
+            <input
+              className="form-input"
+              type="text"
+              value={realName}
+              onChange={(e) => setRealName(e.target.value)}
+              required
+              minLength={2}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Username</label>
+            <input
+              className="form-input"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              minLength={3}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Birthday</label>
+            <input
+              className="form-input"
+              type="date"
+              value={birthdate}
+              onChange={(e) => setBirthdate(e.target.value)}
+              max={new Date().toISOString().split('T')[0]}
+            />
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+              We'll celebrate your birthday with a special message 🎂
+            </div>
+          </div>
+
+          <div className="form-group">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+              <label className="form-label" style={{ margin: 0 }}>Password</label>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                style={{ fontSize: '0.78rem' }}
+                onClick={() => { setChangingPassword(!changingPassword); setError(''); }}
+              >
+                {changingPassword ? 'Cancel' : 'Change password'}
+              </button>
+            </div>
+            {changingPassword ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                <input
+                  className="form-input"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Current password"
+                />
+                <input
+                  className="form-input"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="New password (min 6 chars)"
+                />
+                <input
+                  className="form-input"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                />
+              </div>
+            ) : (
+              <div className="form-input" style={{ background: 'var(--bg)', color: 'var(--text-muted)', userSelect: 'none' }}>
+                ••••••••
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ color: 'var(--danger)' }}
+              onClick={handleLogout}
+            >
+              Logout
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={updateMutation.isPending}
+            >
+              {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

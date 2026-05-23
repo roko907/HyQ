@@ -15,7 +15,7 @@ export default function Navbar() {
   return (
     <nav className="navbar">
       <Link to="/questions" className="navbar-brand">
-        Study<span>Q</span>
+        Hy<span>Q</span>
       </Link>
       <div className="navbar-links">
         {loggedIn ? (

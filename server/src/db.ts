@@ -35,6 +35,7 @@ export async function initDB() {
       updated_at TIMESTAMP DEFAULT NOW()
     );
 
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS birthdate DATE;
     ALTER TABLE questions ADD COLUMN IF NOT EXISTS image_url TEXT;
     ALTER TABLE questions ADD COLUMN IF NOT EXISTS admin_read_at TIMESTAMP;
     ALTER TABLE questions ADD COLUMN IF NOT EXISTS user_read_at TIMESTAMP;
