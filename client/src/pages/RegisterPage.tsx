@@ -5,8 +5,8 @@ import { setAuth } from '../lib/auth';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const [realName, setRealName] = useState('');
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,7 +16,7 @@ export default function RegisterPage() {
     setError('');
     setLoading(true);
     try {
-      const res = await api.post('/auth/register', { username, email, password });
+      const res = await api.post('/auth/register', { username, real_name: realName, password });
       setAuth(res.data.token, res.data.user);
       navigate('/questions');
     } catch (err: unknown) {
@@ -35,26 +35,27 @@ export default function RegisterPage() {
         {error && <div className="error-msg">{error}</div>}
         <form onSubmit={handleSubmit}>
           <div className="form-group">
+            <label className="form-label">Real Name</label>
+            <input
+              className="form-input"
+              type="text"
+              value={realName}
+              onChange={(e) => setRealName(e.target.value)}
+              placeholder="e.g. Alex Johnson"
+              required
+              minLength={2}
+            />
+          </div>
+          <div className="form-group">
             <label className="form-label">Username</label>
             <input
               className="form-input"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="e.g. alex_study"
+              placeholder="e.g. alexj"
               required
               minLength={3}
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Email</label>
-            <input
-              className="form-input"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
             />
           </div>
           <div className="form-group">

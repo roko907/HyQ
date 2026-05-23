@@ -6,6 +6,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'study-app-secret-key';
 export interface AuthRequest extends Request {
   userId?: number;
   username?: string;
+  isAdmin?: boolean;
 }
 
 export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
@@ -17,15 +18,23 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; username: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; username: string; isAdmin: boolean };
     req.userId = decoded.userId;
     req.username = decoded.username;
+    req.isAdmin = decoded.isAdmin;
     next();
   } catch {
     return res.status(403).json({ error: 'Invalid or expired token' });
   }
 }
 
-export function generateToken(userId: number, username: string): string {
-  return jwt.sign({ userId, username }, JWT_SECRET, { expiresIn: '7d' });
+export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.isAdmin) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+}
+
+export function generateToken(userId: number, username: string, isAdmin: boolean): string {
+  return jwt.sign({ userId, username, isAdmin }, JWT_SECRET, { expiresIn: '7d' });
 }

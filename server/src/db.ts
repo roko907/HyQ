@@ -1,4 +1,5 @@
 import pg from 'pg';
+import bcrypt from 'bcryptjs';
 
 const { Pool } = pg;
 
@@ -12,10 +13,15 @@ export async function initDB() {
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       username VARCHAR(50) UNIQUE NOT NULL,
-      email VARCHAR(255) UNIQUE NOT NULL,
+      real_name VARCHAR(100) NOT NULL DEFAULT '',
       password_hash VARCHAR(255) NOT NULL,
+      is_admin BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT NOW()
     );
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS real_name VARCHAR(100) NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
+    ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
 
     CREATE TABLE IF NOT EXISTS questions (
       id SERIAL PRIMARY KEY,
@@ -41,4 +47,19 @@ export async function initDB() {
       PRIMARY KEY (question_id, tag)
     );
   `);
+
+  const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+  const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+
+  const existing = await pool.query('SELECT id FROM users WHERE username = $1', [adminUsername]);
+  if (existing.rows.length === 0) {
+    const hash = await bcrypt.hash(adminPassword, 12);
+    await pool.query(
+      `INSERT INTO users (username, real_name, password_hash, is_admin) VALUES ($1, $2, $3, TRUE)`,
+      [adminUsername, 'Administrator', hash]
+    );
+    console.log(`Admin account created — username: "${adminUsername}", password: "${adminPassword}"`);
+  } else {
+    await pool.query('UPDATE users SET is_admin = TRUE WHERE username = $1', [adminUsername]);
+  }
 }

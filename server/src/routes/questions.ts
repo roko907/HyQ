@@ -15,44 +15,49 @@ const AnswerSchema = z.object({
   content: z.string().min(5),
 });
 
-router.get('/', async (req: AuthRequest, res: Response) => {
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { search, tag, page = '1', limit = '10' } = req.query as Record<string, string>;
+    const { search, page = '1', limit = '20' } = req.query as Record<string, string>;
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    let query = `
+    const conditions: string[] = [];
+    const params: (string | number)[] = [];
+
+    if (!req.isAdmin) {
+      params.push(req.userId!);
+      conditions.push(`q.user_id = $${params.length}`);
+    }
+
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(q.title ILIKE $${params.length} OR q.content ILIKE $${params.length})`);
+    }
+
+    const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    const query = `
       SELECT q.id, q.title, q.content, q.created_at, q.updated_at,
-             u.username, u.id as user_id,
+             u.username, u.real_name, u.id as user_id,
              COUNT(DISTINCT a.id) as answer_count,
              ARRAY_AGG(DISTINCT qt.tag) FILTER (WHERE qt.tag IS NOT NULL) as tags
       FROM questions q
       JOIN users u ON q.user_id = u.id
       LEFT JOIN answers a ON a.question_id = q.id
       LEFT JOIN question_tags qt ON qt.question_id = q.id
+      ${where}
+      GROUP BY q.id, u.username, u.real_name, u.id
+      ORDER BY q.updated_at DESC, q.created_at DESC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
-    const params: (string | number)[] = [];
-    const conditions: string[] = [];
-
-    if (search) {
-      params.push(`%${search}%`);
-      conditions.push(`(q.title ILIKE $${params.length} OR q.content ILIKE $${params.length})`);
-    }
-    if (tag) {
-      params.push(tag);
-      conditions.push(`EXISTS (SELECT 1 FROM question_tags qt2 WHERE qt2.question_id = q.id AND qt2.tag = $${params.length})`);
-    }
-
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-
-    query += ` GROUP BY q.id, u.username, u.id ORDER BY q.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(parseInt(limit), offset);
 
     const result = await pool.query(query, params);
 
-    const countQuery = `SELECT COUNT(*) FROM questions q ${conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : ''}`;
-    const countResult = await pool.query(countQuery, params.slice(0, params.length - 2));
+    const countParams = params.slice(0, params.length - 2);
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM questions q JOIN users u ON q.user_id = u.id ${where}`,
+      countParams
+    );
 
     return res.json({
       questions: result.rows,
@@ -66,35 +71,40 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.get('/:id', async (req: AuthRequest, res: Response) => {
+router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
       `SELECT q.id, q.title, q.content, q.created_at, q.updated_at,
-              u.username, u.id as user_id,
+              u.username, u.real_name, u.id as user_id,
               ARRAY_AGG(DISTINCT qt.tag) FILTER (WHERE qt.tag IS NOT NULL) as tags
        FROM questions q
        JOIN users u ON q.user_id = u.id
        LEFT JOIN question_tags qt ON qt.question_id = q.id
        WHERE q.id = $1
-       GROUP BY q.id, u.username, u.id`,
+       GROUP BY q.id, u.username, u.real_name, u.id`,
       [id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Question not found' });
     }
 
+    const question = result.rows[0];
+    if (!req.isAdmin && question.user_id !== req.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
     const answers = await pool.query(
       `SELECT a.id, a.content, a.is_accepted, a.created_at,
-              u.username, u.id as user_id
+              u.username, u.real_name, u.id as user_id
        FROM answers a
        JOIN users u ON a.user_id = u.id
        WHERE a.question_id = $1
-       ORDER BY a.is_accepted DESC, a.created_at ASC`,
+       ORDER BY a.created_at ASC`,
       [id]
     );
 
-    return res.json({ question: result.rows[0], answers: answers.rows });
+    return res.json({ question, answers: answers.rows });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -106,7 +116,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     const { title, content, tags } = QuestionSchema.parse(req.body);
 
     const result = await pool.query(
-      'INSERT INTO questions (title, content, user_id) VALUES ($1, $2, $3) RETURNING id, title, content, created_at',
+      'INSERT INTO questions (title, content, user_id) VALUES ($1, $2, $3) RETURNING id, title, content, created_at, updated_at',
       [title, content, req.userId]
     );
     const question = result.rows[0];
@@ -120,41 +130,9 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       }
     }
 
+    await pool.query('UPDATE questions SET updated_at = NOW() WHERE id = $1', [question.id]);
+
     return res.status(201).json({ question: { ...question, tags: tags || [] } });
-  } catch (err) {
-    if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: err.errors[0].message });
-    }
-    console.error(err);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { title, content, tags } = QuestionSchema.parse(req.body);
-
-    const existing = await pool.query('SELECT user_id FROM questions WHERE id = $1', [id]);
-    if (existing.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    if (existing.rows[0].user_id !== req.userId) return res.status(403).json({ error: 'Forbidden' });
-
-    await pool.query(
-      'UPDATE questions SET title = $1, content = $2, updated_at = NOW() WHERE id = $3',
-      [title, content, id]
-    );
-
-    if (tags !== undefined) {
-      await pool.query('DELETE FROM question_tags WHERE question_id = $1', [id]);
-      for (const tag of tags) {
-        await pool.query(
-          'INSERT INTO question_tags (question_id, tag) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-          [id, tag.toLowerCase()]
-        );
-      }
-    }
-
-    return res.json({ success: true });
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: err.errors[0].message });
@@ -169,8 +147,9 @@ router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response)
     const { id } = req.params;
     const existing = await pool.query('SELECT user_id FROM questions WHERE id = $1', [id]);
     if (existing.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    if (existing.rows[0].user_id !== req.userId) return res.status(403).json({ error: 'Forbidden' });
-
+    if (!req.isAdmin && existing.rows[0].user_id !== req.userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     await pool.query('DELETE FROM questions WHERE id = $1', [id]);
     return res.json({ success: true });
   } catch (err) {
@@ -184,18 +163,29 @@ router.post('/:id/answers', authenticateToken, async (req: AuthRequest, res: Res
     const { id } = req.params;
     const { content } = AnswerSchema.parse(req.body);
 
-    const question = await pool.query('SELECT id FROM questions WHERE id = $1', [id]);
+    const question = await pool.query('SELECT id, user_id FROM questions WHERE id = $1', [id]);
     if (question.rows.length === 0) return res.status(404).json({ error: 'Question not found' });
+
+    if (!req.isAdmin && question.rows[0].user_id !== req.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
 
     const result = await pool.query(
       'INSERT INTO answers (content, question_id, user_id) VALUES ($1, $2, $3) RETURNING id, content, is_accepted, created_at',
       [content, id, req.userId]
     );
 
-    const userResult = await pool.query('SELECT username FROM users WHERE id = $1', [req.userId]);
+    await pool.query('UPDATE questions SET updated_at = NOW() WHERE id = $1', [id]);
+
+    const userResult = await pool.query('SELECT username, real_name FROM users WHERE id = $1', [req.userId]);
 
     return res.status(201).json({
-      answer: { ...result.rows[0], username: userResult.rows[0].username, user_id: req.userId }
+      answer: {
+        ...result.rows[0],
+        username: userResult.rows[0].username,
+        real_name: userResult.rows[0].real_name,
+        user_id: req.userId,
+      }
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -206,30 +196,14 @@ router.post('/:id/answers', authenticateToken, async (req: AuthRequest, res: Res
   }
 });
 
-router.patch('/:questionId/answers/:answerId/accept', authenticateToken, async (req: AuthRequest, res: Response) => {
-  try {
-    const { questionId, answerId } = req.params;
-    const question = await pool.query('SELECT user_id FROM questions WHERE id = $1', [questionId]);
-    if (question.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    if (question.rows[0].user_id !== req.userId) return res.status(403).json({ error: 'Only the question author can accept answers' });
-
-    await pool.query('UPDATE answers SET is_accepted = FALSE WHERE question_id = $1', [questionId]);
-    await pool.query('UPDATE answers SET is_accepted = TRUE WHERE id = $1', [answerId]);
-
-    return res.json({ success: true });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 router.delete('/:questionId/answers/:answerId', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { answerId } = req.params;
     const answer = await pool.query('SELECT user_id FROM answers WHERE id = $1', [answerId]);
     if (answer.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    if (answer.rows[0].user_id !== req.userId) return res.status(403).json({ error: 'Forbidden' });
-
+    if (!req.isAdmin && answer.rows[0].user_id !== req.userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     await pool.query('DELETE FROM answers WHERE id = $1', [answerId]);
     return res.json({ success: true });
   } catch (err) {

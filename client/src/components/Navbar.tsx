@@ -1,10 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { getUser, clearAuth, isLoggedIn } from '../lib/auth';
+import { getUser, clearAuth, isLoggedIn, isAdmin } from '../lib/auth';
 
 export default function Navbar() {
   const navigate = useNavigate();
   const user = getUser();
   const loggedIn = isLoggedIn();
+  const admin = isAdmin();
 
   function handleLogout() {
     clearAuth();
@@ -19,11 +20,18 @@ export default function Navbar() {
       <div className="navbar-links">
         {loggedIn ? (
           <>
-            <Link to="/ask" className="btn btn-primary btn-sm">
-              + Ask
-            </Link>
+            {admin && (
+              <Link to="/admin" className="btn btn-outline btn-sm" style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}>
+                Admin
+              </Link>
+            )}
+            {!admin && (
+              <Link to="/ask" className="btn btn-primary btn-sm">
+                + Ask
+              </Link>
+            )}
             <Link to="/profile" className="btn btn-ghost btn-sm">
-              {user?.username}
+              {user?.real_name || user?.username}
             </Link>
             <button onClick={handleLogout} className="btn btn-ghost btn-sm">
               Logout
