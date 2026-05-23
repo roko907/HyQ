@@ -27,19 +27,29 @@ export async function initDB() {
       id SERIAL PRIMARY KEY,
       title VARCHAR(255) NOT NULL,
       content TEXT NOT NULL,
+      image_url TEXT,
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      admin_read_at TIMESTAMP,
+      user_read_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     );
 
+    ALTER TABLE questions ADD COLUMN IF NOT EXISTS image_url TEXT;
+    ALTER TABLE questions ADD COLUMN IF NOT EXISTS admin_read_at TIMESTAMP;
+    ALTER TABLE questions ADD COLUMN IF NOT EXISTS user_read_at TIMESTAMP;
+
     CREATE TABLE IF NOT EXISTS answers (
       id SERIAL PRIMARY KEY,
       content TEXT NOT NULL,
+      image_url TEXT,
       question_id INTEGER REFERENCES questions(id) ON DELETE CASCADE,
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
       is_accepted BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT NOW()
     );
+
+    ALTER TABLE answers ADD COLUMN IF NOT EXISTS image_url TEXT;
 
     CREATE TABLE IF NOT EXISTS question_tags (
       question_id INTEGER REFERENCES questions(id) ON DELETE CASCADE,

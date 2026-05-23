@@ -39,11 +39,26 @@ function groupByDate(questions: Question[]) {
   return groups;
 }
 
+function ReadStatus({ q, isAdmin }: { q: Question; isAdmin: boolean }) {
+  if (isAdmin) {
+    if (!q.user_read_at) return <span className="receipt-pill unread">Not seen</span>;
+    const lastAdminAnswer = q.last_answer_at;
+    if (lastAdminAnswer && new Date(q.user_read_at) > new Date(lastAdminAnswer)) {
+      return <span className="receipt-pill seen">&#10003;&#10003; Read</span>;
+    }
+    return <span className="receipt-pill unread">Unread replies</span>;
+  } else {
+    if (!q.admin_read_at) return <span className="receipt-pill unread">Not seen yet</span>;
+    return <span className="receipt-pill seen">&#10003;&#10003; Seen</span>;
+  }
+}
+
 export default function QuestionsPage() {
   const user = getUser();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const isAdmin = user?.is_admin;
 
   const { data, isLoading } = useQuery({
     queryKey: ['questions', search],
@@ -67,11 +82,11 @@ export default function QuestionsPage() {
       <div className="chat-header">
         <div className="chat-header-info">
           <div className="chat-avatar-sm">
-            {user?.is_admin ? 'A' : user?.username?.[0]?.toUpperCase()}
+            {isAdmin ? 'A' : user?.username?.[0]?.toUpperCase()}
           </div>
           <div>
             <div className="chat-header-name">
-              {user?.is_admin ? 'All Conversations' : 'My Questions'}
+              {isAdmin ? 'All Conversations' : 'My Questions'}
             </div>
             <div className="chat-header-sub">
               {data ? `${data.total} question${data.total !== 1 ? 's' : ''}` : '...'}
@@ -101,7 +116,7 @@ export default function QuestionsPage() {
           <div className="empty-state">
             <h3>{search ? 'No results' : 'No questions yet'}</h3>
             <p>{search ? 'Try a different search.' : 'Start by asking your first question!'}</p>
-            {!search && (
+            {!search && !isAdmin && (
               <Link to="/ask" className="btn btn-primary" style={{ marginTop: '1rem' }}>
                 Ask a Question
               </Link>
@@ -111,48 +126,67 @@ export default function QuestionsPage() {
           Object.entries(grouped).map(([dateLabel, qs]) => (
             <div key={dateLabel}>
               <div className="date-divider"><span>{dateLabel}</span></div>
-              {qs.map((q) => (
-                <div
-                  key={q.id}
-                  className="chat-bubble-row"
-                  onClick={() => navigate(`/questions/${q.id}`)}
-                >
-                  <div className="chat-bubble-avatar">
-                    {(user?.is_admin ? q.username : user?.username)?.[0]?.toUpperCase()}
-                  </div>
-                  <div className="chat-bubble-content">
-                    {user?.is_admin && (
-                      <div className="chat-bubble-author">{q.real_name} <span>@{q.username}</span></div>
-                    )}
-                    <div className="chat-bubble">
-                      <div className="chat-bubble-title">{q.title}</div>
-                      <div className="chat-bubble-excerpt">{q.content}</div>
-                      <div className="chat-bubble-footer">
-                        <span className="chat-time">{timeAgo(q.updated_at)}</span>
-                        {Number(q.answer_count) > 0 && (
-                          <span className="chat-reply-count">
-                            {q.answer_count} {Number(q.answer_count) === 1 ? 'reply' : 'replies'}
-                          </span>
+              {qs.map((q) => {
+                const hasUnread = isAdmin
+                  ? !q.user_read_at || (q.last_answer_at && new Date(q.user_read_at) < new Date(q.last_answer_at))
+                  : !q.admin_read_at;
+
+                return (
+                  <div
+                    key={q.id}
+                    className={`chat-bubble-row ${hasUnread ? 'has-unread' : ''}`}
+                    onClick={() => navigate(`/questions/${q.id}`)}
+                  >
+                    <div className="chat-bubble-avatar">
+                      {(isAdmin ? q.username : user?.username)?.[0]?.toUpperCase()}
+                    </div>
+                    <div className="chat-bubble-content">
+                      {isAdmin && (
+                        <div className="chat-bubble-author">
+                          {q.real_name} <span>@{q.username}</span>
+                        </div>
+                      )}
+                      <div className="chat-bubble">
+                        <div className="chat-bubble-title">{q.title}</div>
+                        <div className="chat-bubble-excerpt">{q.content}</div>
+                        {q.image_url && (
+                          <div className="bubble-img-thumb">
+                            <img src={q.image_url} alt="photo" />
+                            <span>Photo</span>
+                          </div>
                         )}
-                        {q.tags?.filter(Boolean).map((tag) => (
-                          <span key={tag} className="tag" style={{ fontSize: '0.72rem', padding: '0.1rem 0.45rem' }}>{tag}</span>
-                        ))}
+                        <div className="chat-bubble-footer">
+                          <span className="chat-time">{timeAgo(q.updated_at)}</span>
+                          {Number(q.answer_count) > 0 && (
+                            <span className="chat-reply-count">
+                              {q.answer_count} {Number(q.answer_count) === 1 ? 'reply' : 'replies'}
+                            </span>
+                          )}
+                          {q.tags?.filter(Boolean).map((tag) => (
+                            <span key={tag} className="tag" style={{ fontSize: '0.72rem', padding: '0.1rem 0.45rem' }}>{tag}</span>
+                          ))}
+                        </div>
                       </div>
                     </div>
+                    <div className="chat-bubble-right">
+                      <div className="chat-bubble-time">{formatTime(q.updated_at)}</div>
+                      <ReadStatus q={q} isAdmin={!!isAdmin} />
+                    </div>
                   </div>
-                  <div className="chat-bubble-time">{formatTime(q.updated_at)}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ))
         )}
       </div>
 
-      <div className="chat-input-bar">
-        <Link to="/ask" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
-          + Ask a New Question
-        </Link>
-      </div>
+      {!isAdmin && (
+        <div className="chat-input-bar">
+          <Link to="/ask" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+            + Ask a New Question
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
-import { useState, KeyboardEvent } from 'react';
+import { useState, KeyboardEvent, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, uploadImage } from '../lib/api';
 
 export default function AskQuestionPage() {
   const navigate = useNavigate();
@@ -10,10 +10,13 @@ export default function AskQuestionPage() {
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const mutation = useMutation({
-    mutationFn: async (data: { title: string; content: string; tags: string[] }) => {
+    mutationFn: async (data: { title: string; content: string; tags: string[]; image_url: string | null }) => {
       const res = await api.post('/questions', data);
       return res.data;
     },
@@ -27,6 +30,22 @@ export default function AskQuestionPage() {
     },
   });
 
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError('');
+    try {
+      const url = await uploadImage(file);
+      setImageUrl(url);
+    } catch {
+      setError('Image upload failed. Please try again.');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  }
+
   function addTag() {
     const t = tagInput.trim().toLowerCase();
     if (t && !tags.includes(t) && tags.length < 5) {
@@ -36,19 +55,14 @@ export default function AskQuestionPage() {
   }
 
   function handleTagKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      addTag();
-    }
-    if (e.key === 'Backspace' && !tagInput && tags.length > 0) {
-      setTags(tags.slice(0, -1));
-    }
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(); }
+    if (e.key === 'Backspace' && !tagInput && tags.length > 0) setTags(tags.slice(0, -1));
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    mutation.mutate({ title, content, tags });
+    mutation.mutate({ title, content, tags, image_url: imageUrl });
   }
 
   return (
@@ -78,22 +92,55 @@ export default function AskQuestionPage() {
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="Provide all the context someone needs to help you..."
-              required
-              minLength={10}
-              style={{ minHeight: '160px' }}
+              minLength={1}
+              style={{ minHeight: '140px' }}
             />
           </div>
+
           <div className="form-group">
-            <label className="form-label">Tags (up to 5, press Enter or comma to add)</label>
+            <label className="form-label">Photo (optional)</label>
+            <div className="upload-area" onClick={() => fileInputRef.current?.click()}>
+              {imageUrl ? (
+                <div className="upload-preview">
+                  <img src={imageUrl} alt="preview" />
+                  <button
+                    type="button"
+                    className="upload-remove"
+                    onClick={(e) => { e.stopPropagation(); setImageUrl(null); }}
+                  >
+                    &times; Remove
+                  </button>
+                </div>
+              ) : (
+                <div className="upload-placeholder">
+                  {uploading ? (
+                    <span>Uploading...</span>
+                  ) : (
+                    <>
+                      <span className="upload-icon">📷</span>
+                      <span>Click to attach a photo</span>
+                      <span className="upload-hint">JPG, PNG, GIF up to 10MB</span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={handleFileChange}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Tags (up to 5, press Enter or comma)</label>
             <div className="tags-input-wrapper">
               {tags.map((tag) => (
                 <span key={tag} className="tag">
                   {tag}
-                  <button
-                    type="button"
-                    className="tag-remove"
-                    onClick={() => setTags(tags.filter((t) => t !== tag))}
-                  >
+                  <button type="button" className="tag-remove" onClick={() => setTags(tags.filter((t) => t !== tag))}>
                     &times;
                   </button>
                 </span>
@@ -110,11 +157,10 @@ export default function AskQuestionPage() {
               )}
             </div>
           </div>
+
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-ghost" onClick={() => navigate(-1)}>
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={mutation.isPending}>
+            <button type="button" className="btn btn-ghost" onClick={() => navigate(-1)}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={mutation.isPending || uploading}>
               {mutation.isPending ? 'Posting...' : 'Post Question'}
             </button>
           </div>
