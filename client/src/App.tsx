@@ -13,6 +13,12 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   return isLoggedIn() ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
+function StudentRoute({ children }: { children: React.ReactNode }) {
+  if (!isLoggedIn()) return <Navigate to="/login" replace />;
+  if (isAdmin()) return <Navigate to="/questions" replace />;
+  return <>{children}</>;
+}
+
 function AdminRoute({ children }: { children: React.ReactNode }) {
   if (!isLoggedIn()) return <Navigate to="/login" replace />;
   if (!isAdmin()) return <Navigate to="/questions" replace />;
@@ -39,7 +45,7 @@ export default function App() {
             />
             <Route
               path="/ask"
-              element={<PrivateRoute><AskQuestionPage /></PrivateRoute>}
+              element={<StudentRoute><AskQuestionPage /></StudentRoute>}
             />
             <Route
               path="/profile"

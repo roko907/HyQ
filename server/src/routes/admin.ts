@@ -9,7 +9,7 @@ router.use(authenticateToken, requireAdmin);
 router.get('/users', async (_req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(`
-      SELECT u.id, u.username, u.real_name, u.is_admin, u.created_at,
+      SELECT u.id, u.username, u.real_name, u.is_admin, u.birthdate, u.created_at,
              COUNT(q.id) as question_count
       FROM users u
       LEFT JOIN questions q ON q.user_id = u.id
