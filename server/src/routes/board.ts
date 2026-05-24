@@ -100,8 +100,8 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
         content: c.content,
         image_url: c.image_url,
         created_at: c.created_at,
+        user_id: Number(c.user_id),
         is_author: uid === postAuthorIdStr,
-        is_me: uid === meIdStr,
         is_admin: !!c.commenter_is_admin,
         anon_num: anonMap[uid] ?? null,
         real_name: req.isAdmin ? c.real_name : null,
@@ -115,7 +115,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
         title: post.title,
         content: post.content,
         image_url: post.image_url,
-        is_mine: Number(post.user_id) === meId,
+        user_id: Number(post.user_id),
         created_at: post.created_at,
         updated_at: post.updated_at,
         real_name: req.isAdmin ? post.real_name : null,
@@ -174,8 +174,8 @@ router.post('/:id/comments', async (req: AuthRequest, res: Response) => {
     return res.status(201).json({
       comment: {
         ...result.rows[0],
+        user_id: Number(req.userId),
         is_author: String(req.userId) === String(post.user_id),
-        is_me: true,
         is_admin: !!req.isAdmin,
         anon_num: anonNum,
         real_name: req.isAdmin ? me.real_name : null,

@@ -8,8 +8,8 @@ interface BoardComment {
   id: number;
   content: string;
   image_url: string | null;
+  user_id: number;
   is_author: boolean;
-  is_me: boolean;
   is_admin: boolean;
   anon_num: number;
   real_name: string | null;
@@ -23,7 +23,7 @@ interface BoardPostDetail {
     title: string;
     content: string;
     image_url: string | null;
-    is_mine: boolean;
+    user_id: number;
     real_name: string | null;
     username: string | null;
     created_at: string;
@@ -40,7 +40,7 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function CommentLabel({ c, isViewerAdmin }: { c: BoardComment; isViewerAdmin: boolean }) {
+function CommentLabel({ c, isViewerAdmin, isMe }: { c: BoardComment; isViewerAdmin: boolean; isMe: boolean }) {
   const nameEl = isViewerAdmin && c.real_name
     ? <span className="board-real-name">{c.real_name}<span className="board-username">@{c.username}</span></span>
     : c.is_author
@@ -51,7 +51,7 @@ function CommentLabel({ c, isViewerAdmin }: { c: BoardComment; isViewerAdmin: bo
     <div className="board-comment-label">
       {nameEl}
       {c.is_admin && <span className="board-badge admin-badge">Admin</span>}
-      {c.is_me && <span className="board-badge me">You</span>}
+      {isMe && <span className="board-badge me">You</span>}
     </div>
   );
 }
@@ -148,6 +148,8 @@ export default function BoardPostPage() {
   );
 
   const { post, comments } = data;
+  const myId = currentUser?.id;
+  const isMinePost = post.user_id === myId;
 
   return (
     <div style={{ maxWidth: '720px', margin: '0 auto' }}>
@@ -168,7 +170,7 @@ export default function BoardPostPage() {
             <span className="anon-chip large">Anonymous</span>
           )}
           <span className="board-time">{formatDate(post.created_at)}</span>
-          {(post.is_mine || isAdmin) && (
+          {(isMinePost || isAdmin) && (
             <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)', marginLeft: 'auto' }}
               onClick={() => { if (confirm('Delete this post?')) deletePostMutation.mutate(); }}>
               Delete
@@ -193,13 +195,15 @@ export default function BoardPostPage() {
             No comments yet. Be the first to reply!
           </div>
         ) : (
-          comments.map((c) => (
-            <div key={c.id} className={`board-comment ${c.is_me ? 'is-me' : ''}`}>
+          comments.map((c) => {
+            const isMe = c.user_id === myId;
+            return (
+            <div key={c.id} className={`board-comment ${isMe ? 'is-me' : ''}`}>
               <div className="board-comment-avatar">
                 {c.is_author ? 'A' : `${c.anon_num}`}
               </div>
               <div className="board-comment-body">
-                <CommentLabel c={c} isViewerAdmin={!!isAdmin} />
+                <CommentLabel c={c} isViewerAdmin={!!isAdmin} isMe={isMe} />
                 {c.content && <div className="board-comment-text">{c.content}</div>}
                 {c.image_url && (
                   <div className="msg-image-wrap">
@@ -209,13 +213,14 @@ export default function BoardPostPage() {
                 )}
                 <div className="board-comment-time">
                   {formatTime(c.created_at)}
-                  {(c.is_me || isAdmin) && (
+                  {(isMe || isAdmin) && (
                     <button className="msg-delete-btn" onClick={() => deleteCommentMutation.mutate(c.id)} title="Delete">&times;</button>
                   )}
                 </div>
               </div>
             </div>
-          ))
+            );
+          })
         )}
         <div ref={bottomRef} />
       </div>
