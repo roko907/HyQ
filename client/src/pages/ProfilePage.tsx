@@ -4,19 +4,37 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, User } from '../lib/api';
 import { getUser, setAuth, clearAuth } from '../lib/auth';
 
-function isBirthdayToday(birthdate: string | null | undefined): boolean {
-  if (!birthdate) return false;
-  const today = new Date();
-  const bd = new Date(birthdate);
-  return bd.getMonth() === today.getMonth() && bd.getDate() === today.getDate();
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function daysInMonth(month: number, year: number) {
+  if (!month) return 31;
+  return new Date(year || 2000, month, 0).getDate();
 }
 
-function formatBirthdate(dateStr: string | null | undefined): string {
-  if (!dateStr) return '';
+function parseBirthdate(dateStr: string | null | undefined) {
+  if (!dateStr) return { month: '', day: '', year: '' };
   const d = new Date(dateStr);
-  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(d.getUTCDate()).padStart(2, '0');
-  return `${d.getUTCFullYear()}-${month}-${day}`;
+  return {
+    month: String(d.getUTCMonth() + 1),
+    day: String(d.getUTCDate()),
+    year: String(d.getUTCFullYear()),
+  };
+}
+
+function buildBirthdateString(month: string, day: string, year: string): string | null {
+  if (!month || !day || !year) return null;
+  const m = String(month).padStart(2, '0');
+  const d = String(day).padStart(2, '0');
+  return `${year}-${m}-${d}`;
+}
+
+function isBirthdayToday(month: string, day: string): boolean {
+  if (!month || !day) return false;
+  const today = new Date();
+  return parseInt(month) === today.getMonth() + 1 && parseInt(day) === today.getDate();
 }
 
 export default function ProfilePage() {
@@ -26,7 +44,9 @@ export default function ProfilePage() {
 
   const [username, setUsername] = useState(currentUser?.username || '');
   const [realName, setRealName] = useState(currentUser?.real_name || '');
-  const [birthdate, setBirthdate] = useState(formatBirthdate(currentUser?.birthdate));
+  const [bdMonth, setBdMonth] = useState('');
+  const [bdDay, setBdDay] = useState('');
+  const [bdYear, setBdYear] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -34,14 +54,17 @@ export default function ProfilePage() {
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
 
-  const isBirthday = isBirthdayToday(currentUser?.birthdate);
+  const isBirthday = isBirthdayToday(bdMonth, bdDay);
 
   useEffect(() => {
     api.get('/auth/me').then((res) => {
       const u: User = res.data.user;
       setUsername(u.username);
       setRealName(u.real_name);
-      setBirthdate(formatBirthdate(u.birthdate));
+      const parsed = parseBirthdate(u.birthdate);
+      setBdMonth(parsed.month);
+      setBdDay(parsed.day);
+      setBdYear(parsed.year);
     }).catch(() => {});
   }, []);
 
@@ -83,7 +106,7 @@ export default function ProfilePage() {
     const payload: Record<string, string | undefined | null> = {
       username,
       real_name: realName,
-      birthdate: birthdate || null,
+      birthdate: buildBirthdateString(bdMonth, bdDay, bdYear),
     };
     if (changingPassword) {
       payload.current_password = currentPassword;
@@ -98,6 +121,11 @@ export default function ProfilePage() {
   }
 
   if (!currentUser) return null;
+
+  const currentYear = new Date().getFullYear();
+  const maxDays = daysInMonth(parseInt(bdMonth), parseInt(bdYear));
+  const dayOptions = Array.from({ length: maxDays }, (_, i) => i + 1);
+  const yearOptions = Array.from({ length: 100 }, (_, i) => currentYear - i);
 
   return (
     <div style={{ maxWidth: '560px', margin: '0 auto' }}>
@@ -156,13 +184,38 @@ export default function ProfilePage() {
 
           <div className="form-group">
             <label className="form-label">Birthday</label>
-            <input
-              className="form-input"
-              type="date"
-              value={birthdate}
-              onChange={(e) => setBirthdate(e.target.value)}
-              max={new Date().toISOString().split('T')[0]}
-            />
+            <div className="birthday-selects">
+              <select
+                className="form-select"
+                value={bdMonth}
+                onChange={(e) => { setBdMonth(e.target.value); setBdDay(''); }}
+              >
+                <option value="">Month</option>
+                {MONTHS.map((m, i) => (
+                  <option key={m} value={String(i + 1)}>{m}</option>
+                ))}
+              </select>
+              <select
+                className="form-select"
+                value={bdDay}
+                onChange={(e) => setBdDay(e.target.value)}
+              >
+                <option value="">Day</option>
+                {dayOptions.map((d) => (
+                  <option key={d} value={String(d)}>{d}</option>
+                ))}
+              </select>
+              <select
+                className="form-select"
+                value={bdYear}
+                onChange={(e) => setBdYear(e.target.value)}
+              >
+                <option value="">Year</option>
+                {yearOptions.map((y) => (
+                  <option key={y} value={String(y)}>{y}</option>
+                ))}
+              </select>
+            </div>
             <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
               We'll celebrate your birthday with a special message 🎂
             </div>
