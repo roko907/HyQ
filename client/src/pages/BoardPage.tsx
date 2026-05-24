@@ -96,11 +96,9 @@ export default function BoardPage() {
             {isAdmin ? 'Viewing as admin — real names visible' : 'All posts are anonymous — share freely'}
           </p>
         </div>
-        {!isAdmin && (
-          <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setError(''); }}>
-            {showForm ? 'Cancel' : '+ New Post'}
-          </button>
-        )}
+        <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setError(''); }}>
+          {showForm ? 'Cancel' : '+ New Post'}
+        </button>
       </div>
 
       {showForm && (
