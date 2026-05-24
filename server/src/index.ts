@@ -8,6 +8,7 @@ import authRoutes from './routes/auth.js';
 import questionsRoutes from './routes/questions.js';
 import adminRoutes from './routes/admin.js';
 import uploadRoutes from './routes/upload.js';
+import boardRoutes from './routes/board.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -23,6 +24,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/questions', questionsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/board', boardRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });

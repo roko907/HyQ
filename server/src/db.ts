@@ -52,6 +52,28 @@ export async function initDB() {
 
     ALTER TABLE answers ADD COLUMN IF NOT EXISTS image_url TEXT;
 
+    CREATE TABLE IF NOT EXISTS board_posts (
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      content TEXT NOT NULL,
+      image_url TEXT,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS board_comments (
+      id SERIAL PRIMARY KEY,
+      content TEXT NOT NULL,
+      image_url TEXT,
+      post_id INTEGER REFERENCES board_posts(id) ON DELETE CASCADE,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    ALTER TABLE board_posts ADD COLUMN IF NOT EXISTS image_url TEXT;
+    ALTER TABLE board_comments ADD COLUMN IF NOT EXISTS image_url TEXT;
+
     CREATE TABLE IF NOT EXISTS question_tags (
       question_id INTEGER REFERENCES questions(id) ON DELETE CASCADE,
       tag VARCHAR(50) NOT NULL,
