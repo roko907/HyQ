@@ -21,13 +21,22 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(`
       SELECT p.id, p.title, p.content, p.image_url, p.created_at, p.updated_at,
+             u.real_name, u.username,
              COUNT(DISTINCT c.id) as comment_count
       FROM board_posts p
+      JOIN users u ON p.user_id = u.id
       LEFT JOIN board_comments c ON c.post_id = p.id
-      GROUP BY p.id
+      GROUP BY p.id, u.real_name, u.username
       ORDER BY p.updated_at DESC, p.created_at DESC
     `);
-    return res.json({ posts: result.rows });
+
+    const posts = result.rows.map((p) => ({
+      ...p,
+      real_name: req.isAdmin ? p.real_name : null,
+      username: req.isAdmin ? p.username : null,
+    }));
+
+    return res.json({ posts });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -53,20 +62,25 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const postResult = await pool.query(
-      'SELECT id, title, content, image_url, user_id, created_at, updated_at FROM board_posts WHERE id = $1',
+      `SELECT p.id, p.title, p.content, p.image_url, p.user_id, p.created_at, p.updated_at,
+              u.real_name, u.username
+       FROM board_posts p JOIN users u ON p.user_id = u.id
+       WHERE p.id = $1`,
       [id]
     );
     if (postResult.rows.length === 0) return res.status(404).json({ error: 'Post not found' });
     const post = postResult.rows[0];
 
     const commentsResult = await pool.query(
-      'SELECT id, content, image_url, user_id, created_at FROM board_comments WHERE post_id = $1 ORDER BY created_at ASC',
+      `SELECT c.id, c.content, c.image_url, c.user_id, c.created_at,
+              u.real_name, u.username
+       FROM board_comments c JOIN users u ON c.user_id = u.id
+       WHERE c.post_id = $1 ORDER BY c.created_at ASC`,
       [id]
     );
     const rawComments = commentsResult.rows;
 
-    // Build stable anon number map: first commenter = 1, second = 2, ...
-    // order by first appearance time (post author also gets a number but shown as "Author")
+    // Build stable anon number map ordered by first appearance
     const seenUsers: number[] = [];
     for (const c of rawComments) {
       if (!seenUsers.includes(c.user_id)) seenUsers.push(c.user_id);
@@ -82,9 +96,10 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       is_author: c.user_id === post.user_id,
       is_me: c.user_id === req.userId,
       anon_num: anonMap[c.user_id] ?? null,
+      real_name: req.isAdmin ? c.real_name : null,
+      username: req.isAdmin ? c.username : null,
     }));
 
-    // Strip user_id from post before returning
     return res.json({
       post: {
         id: post.id,
@@ -94,6 +109,8 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
         is_mine: post.user_id === req.userId,
         created_at: post.created_at,
         updated_at: post.updated_at,
+        real_name: req.isAdmin ? post.real_name : null,
+        username: req.isAdmin ? post.username : null,
       },
       comments,
     });
@@ -123,9 +140,7 @@ router.post('/:id/comments', async (req: AuthRequest, res: Response) => {
     const { content, image_url } = CommentSchema.parse(req.body);
     if (!content.trim() && !image_url) return res.status(400).json({ error: 'Comment cannot be empty' });
 
-    const postResult = await pool.query(
-      'SELECT id, user_id FROM board_posts WHERE id = $1', [id]
-    );
+    const postResult = await pool.query('SELECT id, user_id FROM board_posts WHERE id = $1', [id]);
     if (postResult.rows.length === 0) return res.status(404).json({ error: 'Post not found' });
     const post = postResult.rows[0];
 
@@ -135,12 +150,6 @@ router.post('/:id/comments', async (req: AuthRequest, res: Response) => {
     );
     await pool.query('UPDATE board_posts SET updated_at = NOW() WHERE id = $1', [id]);
 
-    // Compute anon_num for this user in the post
-    const seenResult = await pool.query(
-      'SELECT DISTINCT user_id FROM board_comments WHERE post_id = $1 ORDER BY MIN(created_at) ASC',
-      [id]
-    );
-    // Re-query to get correct order
     const orderedResult = await pool.query(
       `SELECT user_id FROM (
          SELECT user_id, MIN(created_at) as first_time FROM board_comments WHERE post_id = $1 GROUP BY user_id
@@ -150,12 +159,17 @@ router.post('/:id/comments', async (req: AuthRequest, res: Response) => {
     const orderedUsers = orderedResult.rows.map((r: { user_id: number }) => r.user_id);
     const anonNum = orderedUsers.indexOf(req.userId!) + 1;
 
+    const meResult = await pool.query('SELECT real_name, username FROM users WHERE id = $1', [req.userId]);
+    const me = meResult.rows[0];
+
     return res.status(201).json({
       comment: {
         ...result.rows[0],
         is_author: req.userId === post.user_id,
         is_me: true,
         anon_num: anonNum,
+        real_name: req.isAdmin ? me.real_name : null,
+        username: req.isAdmin ? me.username : null,
       }
     });
   } catch (err) {

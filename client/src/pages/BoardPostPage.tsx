@@ -11,6 +11,8 @@ interface BoardComment {
   is_author: boolean;
   is_me: boolean;
   anon_num: number;
+  real_name: string | null;
+  username: string | null;
   created_at: string;
 }
 
@@ -21,6 +23,8 @@ interface BoardPostDetail {
     content: string;
     image_url: string | null;
     is_mine: boolean;
+    real_name: string | null;
+    username: string | null;
     created_at: string;
     updated_at: string;
   };
@@ -35,24 +39,27 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function AnonLabel({ c }: { c: BoardComment }) {
-  const parts: React.ReactNode[] = [];
-
-  if (c.is_author) {
-    parts.push(<span key="author" className="board-badge author">Author</span>);
-  } else {
-    parts.push(
-      <span key="anon" className="board-anon-name">
-        Anonymous{c.anon_num}
-      </span>
+function CommentLabel({ c, isAdmin }: { c: BoardComment; isAdmin: boolean }) {
+  if (isAdmin && c.real_name) {
+    return (
+      <div className="board-comment-label">
+        <span className="board-real-name">{c.real_name}
+          <span className="board-username">@{c.username}</span>
+        </span>
+        {c.is_author && <span className="board-badge author">Author</span>}
+        {c.is_me && <span className="board-badge me">You</span>}
+      </div>
     );
   }
-
-  if (c.is_me) {
-    parts.push(<span key="me" className="board-badge me">You</span>);
-  }
-
-  return <div className="board-comment-label">{parts}</div>;
+  return (
+    <div className="board-comment-label">
+      {c.is_author
+        ? <span className="board-badge author">Author</span>
+        : <span className="board-anon-name">Anonymous{c.anon_num}</span>
+      }
+      {c.is_me && <span className="board-badge me">You</span>}
+    </div>
+  );
 }
 
 export default function BoardPostPage() {
@@ -60,6 +67,8 @@ export default function BoardPostPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const currentUser = getUser();
+  const isAdmin = currentUser?.is_admin;
+
   const [commentText, setCommentText] = useState('');
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -133,10 +142,7 @@ export default function BoardPostPage() {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   }
 
   if (isLoading) return <div className="spinner" style={{ marginTop: '4rem' }} />;
@@ -148,25 +154,29 @@ export default function BoardPostPage() {
   );
 
   const { post, comments } = data;
-  const isAdmin = currentUser?.is_admin;
 
   return (
     <div style={{ maxWidth: '720px', margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
         <button className="btn btn-ghost btn-sm" onClick={() => navigate('/board')}>&larr; Board</button>
+        {isAdmin && (
+          <span className="admin-view-pill">Admin view — identities visible</span>
+        )}
       </div>
 
-      {/* Post */}
       <div className="card board-post-card">
         <div className="board-post-header">
-          <span className="anon-chip large">Anonymous</span>
+          {isAdmin && post.real_name ? (
+            <span className="board-real-name large">{post.real_name}
+              <span className="board-username">@{post.username}</span>
+            </span>
+          ) : (
+            <span className="anon-chip large">Anonymous</span>
+          )}
           <span className="board-time">{formatDate(post.created_at)}</span>
           {(post.is_mine || isAdmin) && (
-            <button
-              className="btn btn-ghost btn-sm"
-              style={{ color: 'var(--danger)', marginLeft: 'auto' }}
-              onClick={() => { if (confirm('Delete this post?')) deletePostMutation.mutate(); }}
-            >
+            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)', marginLeft: 'auto' }}
+              onClick={() => { if (confirm('Delete this post?')) deletePostMutation.mutate(); }}>
               Delete
             </button>
           )}
@@ -183,7 +193,6 @@ export default function BoardPostPage() {
         </div>
       </div>
 
-      {/* Comments */}
       <div className="board-comments-section">
         {comments.length === 0 ? (
           <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '1.5rem', fontSize: '0.9rem' }}>
@@ -196,7 +205,7 @@ export default function BoardPostPage() {
                 {c.is_author ? 'A' : `${c.anon_num}`}
               </div>
               <div className="board-comment-body">
-                <AnonLabel c={c} />
+                <CommentLabel c={c} isAdmin={!!isAdmin} />
                 {c.content && <div className="board-comment-text">{c.content}</div>}
                 {c.image_url && (
                   <div className="msg-image-wrap">
@@ -207,11 +216,7 @@ export default function BoardPostPage() {
                 <div className="board-comment-time">
                   {formatTime(c.created_at)}
                   {(c.is_me || isAdmin) && (
-                    <button
-                      className="msg-delete-btn"
-                      onClick={() => deleteCommentMutation.mutate(c.id)}
-                      title="Delete"
-                    >&times;</button>
+                    <button className="msg-delete-btn" onClick={() => deleteCommentMutation.mutate(c.id)} title="Delete">&times;</button>
                   )}
                 </div>
               </div>
@@ -221,7 +226,6 @@ export default function BoardPostPage() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Comment input */}
       <div className="board-comment-input">
         {error && <div className="error-msg" style={{ margin: '0 0 0.5rem' }}>{error}</div>}
         {pendingImage && (
@@ -236,22 +240,20 @@ export default function BoardPostPage() {
             {uploading ? '...' : '📎'}
           </button>
           <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
-          <textarea
-            className="chat-textarea"
-            value={commentText}
-            onChange={(e) => setCommentText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Write a comment anonymously… (Enter to send)"
-            rows={1}
-          />
+          <textarea className="chat-textarea" value={commentText}
+            onChange={(e) => setCommentText(e.target.value)} onKeyDown={handleKeyDown}
+            placeholder={isAdmin ? 'Write a comment…' : 'Write a comment anonymously… (Enter to send)'}
+            rows={1} />
           <button className="btn btn-primary" onClick={handleSend}
             disabled={commentMutation.isPending || (!commentText.trim() && !pendingImage)}>
             Send
           </button>
         </div>
-        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem', textAlign: 'center' }}>
-          Your identity is hidden from other users
-        </div>
+        {!isAdmin && (
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.35rem', textAlign: 'center' }}>
+            Your identity is hidden from other users
+          </div>
+        )}
       </div>
     </div>
   );

@@ -2,12 +2,15 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, uploadImage } from '../lib/api';
+import { getUser } from '../lib/auth';
 
 interface BoardPost {
   id: number;
   title: string;
   content: string;
   image_url: string | null;
+  real_name: string | null;
+  username: string | null;
   comment_count: number;
   created_at: string;
   updated_at: string;
@@ -27,6 +30,9 @@ function timeAgo(dateStr: string) {
 export default function BoardPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const currentUser = getUser();
+  const isAdmin = currentUser?.is_admin;
+
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -87,15 +93,14 @@ export default function BoardPage() {
         <div>
           <h1 className="page-title">Anonymous Board</h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.15rem' }}>
-            All posts are anonymous — share freely
+            {isAdmin ? 'Viewing as admin — real names visible' : 'All posts are anonymous — share freely'}
           </p>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={() => { setShowForm(!showForm); setError(''); }}
-        >
-          {showForm ? 'Cancel' : '+ New Post'}
-        </button>
+        {!isAdmin && (
+          <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setError(''); }}>
+            {showForm ? 'Cancel' : '+ New Post'}
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -105,24 +110,14 @@ export default function BoardPage() {
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label className="form-label">Title</label>
-              <input
-                className="form-input"
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="What's on your mind?"
-                autoFocus
-              />
+              <input className="form-input" type="text" value={title}
+                onChange={(e) => setTitle(e.target.value)} placeholder="What's on your mind?" autoFocus />
             </div>
             <div className="form-group">
               <label className="form-label">Content</label>
-              <textarea
-                className="form-textarea"
-                value={content}
+              <textarea className="form-textarea" value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="Write your post here…"
-                style={{ minHeight: '120px' }}
-              />
+                placeholder="Write your post here…" style={{ minHeight: '120px' }} />
             </div>
             {imageUrl && (
               <div className="pending-image-preview" style={{ borderRadius: 'var(--radius)', marginBottom: '1rem', border: '1px solid var(--border)' }}>
@@ -154,21 +149,21 @@ export default function BoardPage() {
       ) : (
         <div className="board-list">
           {data.posts.map((post) => (
-            <div
-              key={post.id}
-              className="board-card"
-              onClick={() => navigate(`/board/${post.id}`)}
-            >
+            <div key={post.id} className="board-card" onClick={() => navigate(`/board/${post.id}`)}>
               <div className="board-card-header">
-                <span className="anon-chip">Anonymous</span>
+                {isAdmin && post.real_name ? (
+                  <span className="board-real-name">{post.real_name}
+                    <span className="board-username">@{post.username}</span>
+                  </span>
+                ) : (
+                  <span className="anon-chip">Anonymous</span>
+                )}
                 <span className="board-time">{timeAgo(post.updated_at)}</span>
               </div>
               <div className="board-card-title">{post.title}</div>
               <div className="board-card-excerpt">{post.content}</div>
               {post.image_url && (
-                <div className="board-card-img">
-                  <img src={post.image_url} alt="post" />
-                </div>
+                <div className="board-card-img"><img src={post.image_url} alt="post" /></div>
               )}
               <div className="board-card-footer">
                 <span className="board-comment-count">
