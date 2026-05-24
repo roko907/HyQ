@@ -88,13 +88,16 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
     const anonMap: Record<number, number> = {};
     seenUsers.forEach((uid, idx) => { anonMap[uid] = idx + 1; });
 
+    const meId = Number(req.userId);
+    const postAuthorId = Number(post.user_id);
+
     const comments = rawComments.map((c) => ({
       id: c.id,
       content: c.content,
       image_url: c.image_url,
       created_at: c.created_at,
-      is_author: c.user_id === post.user_id,
-      is_me: c.user_id === req.userId,
+      is_author: Number(c.user_id) === postAuthorId,
+      is_me: Number(c.user_id) === meId,
       anon_num: anonMap[c.user_id] ?? null,
       real_name: req.isAdmin ? c.real_name : null,
       username: req.isAdmin ? c.username : null,
@@ -106,7 +109,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
         title: post.title,
         content: post.content,
         image_url: post.image_url,
-        is_mine: post.user_id === req.userId,
+        is_mine: Number(post.user_id) === meId,
         created_at: post.created_at,
         updated_at: post.updated_at,
         real_name: req.isAdmin ? post.real_name : null,
@@ -165,7 +168,7 @@ router.post('/:id/comments', async (req: AuthRequest, res: Response) => {
     return res.status(201).json({
       comment: {
         ...result.rows[0],
-        is_author: req.userId === post.user_id,
+        is_author: Number(req.userId) === Number(post.user_id),
         is_me: true,
         anon_num: anonNum,
         real_name: req.isAdmin ? me.real_name : null,
