@@ -73,35 +73,41 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
     const commentsResult = await pool.query(
       `SELECT c.id, c.content, c.image_url, c.user_id, c.created_at,
-              u.real_name, u.username
+              u.real_name, u.username, u.is_admin as commenter_is_admin
        FROM board_comments c JOIN users u ON c.user_id = u.id
        WHERE c.post_id = $1 ORDER BY c.created_at ASC`,
       [id]
     );
     const rawComments = commentsResult.rows;
 
-    // Build stable anon number map ordered by first appearance
-    const seenUsers: number[] = [];
+    // Use string keys throughout to avoid number/string type mismatches
+    const meIdStr = String(req.userId);
+    const postAuthorIdStr = String(post.user_id);
+
+    // Build stable anon number map: keyed by string user_id, ordered by first appearance
+    const seenUserIds: string[] = [];
     for (const c of rawComments) {
-      if (!seenUsers.includes(c.user_id)) seenUsers.push(c.user_id);
+      const uid = String(c.user_id);
+      if (!seenUserIds.includes(uid)) seenUserIds.push(uid);
     }
-    const anonMap: Record<number, number> = {};
-    seenUsers.forEach((uid, idx) => { anonMap[uid] = idx + 1; });
+    const anonMap: Record<string, number> = {};
+    seenUserIds.forEach((uid, idx) => { anonMap[uid] = idx + 1; });
 
-    const meId = Number(req.userId);
-    const postAuthorId = Number(post.user_id);
-
-    const comments = rawComments.map((c) => ({
-      id: c.id,
-      content: c.content,
-      image_url: c.image_url,
-      created_at: c.created_at,
-      is_author: Number(c.user_id) === postAuthorId,
-      is_me: Number(c.user_id) === meId,
-      anon_num: anonMap[c.user_id] ?? null,
-      real_name: req.isAdmin ? c.real_name : null,
-      username: req.isAdmin ? c.username : null,
-    }));
+    const comments = rawComments.map((c) => {
+      const uid = String(c.user_id);
+      return {
+        id: c.id,
+        content: c.content,
+        image_url: c.image_url,
+        created_at: c.created_at,
+        is_author: uid === postAuthorIdStr,
+        is_me: uid === meIdStr,
+        is_admin: !!c.commenter_is_admin,
+        anon_num: anonMap[uid] ?? null,
+        real_name: req.isAdmin ? c.real_name : null,
+        username: req.isAdmin ? c.username : null,
+      };
+    });
 
     return res.json({
       post: {
@@ -168,8 +174,9 @@ router.post('/:id/comments', async (req: AuthRequest, res: Response) => {
     return res.status(201).json({
       comment: {
         ...result.rows[0],
-        is_author: Number(req.userId) === Number(post.user_id),
+        is_author: String(req.userId) === String(post.user_id),
         is_me: true,
+        is_admin: !!req.isAdmin,
         anon_num: anonNum,
         real_name: req.isAdmin ? me.real_name : null,
         username: req.isAdmin ? me.username : null,

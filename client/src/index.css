@@ -1099,6 +1099,10 @@ body {
   background: #ede9fe;
   color: #6d28d9;
 }
+.board-badge.admin-badge {
+  background: #fee2e2;
+  color: #991b1b;
+}
 
 .board-comment-text {
   font-size: 0.9rem;

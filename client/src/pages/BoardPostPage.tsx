@@ -10,6 +10,7 @@ interface BoardComment {
   image_url: string | null;
   is_author: boolean;
   is_me: boolean;
+  is_admin: boolean;
   anon_num: number;
   real_name: string | null;
   username: string | null;
@@ -39,24 +40,17 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function CommentLabel({ c, isAdmin }: { c: BoardComment; isAdmin: boolean }) {
-  if (isAdmin && c.real_name) {
-    return (
-      <div className="board-comment-label">
-        <span className="board-real-name">{c.real_name}
-          <span className="board-username">@{c.username}</span>
-        </span>
-        {c.is_author && <span className="board-badge author">Author</span>}
-        {c.is_me && <span className="board-badge me">You</span>}
-      </div>
-    );
-  }
+function CommentLabel({ c, isViewerAdmin }: { c: BoardComment; isViewerAdmin: boolean }) {
+  const nameEl = isViewerAdmin && c.real_name
+    ? <span className="board-real-name">{c.real_name}<span className="board-username">@{c.username}</span></span>
+    : c.is_author
+      ? <span className="board-badge author">Author</span>
+      : <span className="board-anon-name">Anonymous{c.anon_num}</span>;
+
   return (
     <div className="board-comment-label">
-      {c.is_author
-        ? <span className="board-badge author">Author</span>
-        : <span className="board-anon-name">Anonymous{c.anon_num}</span>
-      }
+      {nameEl}
+      {c.is_admin && <span className="board-badge admin-badge">Admin</span>}
       {c.is_me && <span className="board-badge me">You</span>}
     </div>
   );
@@ -205,7 +199,7 @@ export default function BoardPostPage() {
                 {c.is_author ? 'A' : `${c.anon_num}`}
               </div>
               <div className="board-comment-body">
-                <CommentLabel c={c} isAdmin={!!isAdmin} />
+                <CommentLabel c={c} isViewerAdmin={!!isAdmin} />
                 {c.content && <div className="board-comment-text">{c.content}</div>}
                 {c.image_url && (
                   <div className="msg-image-wrap">
