@@ -40,6 +40,8 @@ export default function BoardPage() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [boardSearch, setBoardSearch] = useState('');
+  const [boardFilter, setBoardFilter] = useState<'all' | 'mine'>('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading } = useQuery({
@@ -48,6 +50,17 @@ export default function BoardPage() {
       const res = await api.get('/board');
       return res.data as { posts: BoardPost[] };
     },
+  });
+
+  const posts = data?.posts || [];
+  const myPosts = posts.filter((post) => post.is_mine);
+  const visiblePosts = posts.filter((post) => {
+    const matchesFilter = boardFilter === 'all' || post.is_mine;
+    const search = boardSearch.trim().toLowerCase();
+    const matchesSearch = !search
+      || post.title.toLowerCase().includes(search)
+      || post.content.toLowerCase().includes(search);
+    return matchesFilter && matchesSearch;
   });
 
   const createMutation = useMutation({
@@ -89,18 +102,25 @@ export default function BoardPage() {
   }
 
   return (
-    <div style={{ maxWidth: '720px', margin: '0 auto' }}>
-      <div className="page-header">
+    <div className="board-shell">
+      <section className="workspace-hero board-hero">
         <div>
-          <h1 className="page-title">Anonymous Board</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.15rem' }}>
-            {isAdmin ? 'Viewing as admin — real names visible' : 'All posts are anonymous — share freely'}
-          </p>
+          <span className="eyebrow">Community space</span>
+          <h1>Anonymous board</h1>
+          <p>{isAdmin ? 'You can review identities here as an admin.' : 'Share a thought, question, or experience without attaching your name.'}</p>
         </div>
         <button className="btn btn-primary" onClick={() => { setShowForm(!showForm); setError(''); }}>
-          {showForm ? 'Cancel' : '+ New Post'}
+          <span className="btn-plus" aria-hidden="true">{showForm ? '×' : '+'}</span>
+          {showForm ? 'Close composer' : 'New post'}
         </button>
-      </div>
+      </section>
+
+      {!isAdmin && (
+        <div className="privacy-strip">
+          <span className="privacy-strip-icon" aria-hidden="true">◎</span>
+          <span>Your name stays hidden from other students. Only you see the <strong>본인</strong> label on your posts and comments.</span>
+        </div>
+      )}
 
       {showForm && (
         <div className="card" style={{ marginBottom: '1.5rem' }}>
@@ -138,16 +158,36 @@ export default function BoardPage() {
         </div>
       )}
 
+      <div className="board-toolbar">
+        <div className="filter-tabs" role="tablist" aria-label="Board posts">
+          <button type="button" role="tab" aria-selected={boardFilter === 'all'} className={`filter-tab ${boardFilter === 'all' ? 'active' : ''}`} onClick={() => setBoardFilter('all')}>
+            All posts<span>{posts.length}</span>
+          </button>
+          <button type="button" role="tab" aria-selected={boardFilter === 'mine'} className={`filter-tab ${boardFilter === 'mine' ? 'active' : ''}`} onClick={() => setBoardFilter('mine')}>
+            My posts<span>{myPosts.length}</span>
+          </button>
+        </div>
+        <input
+          className="board-search"
+          type="search"
+          value={boardSearch}
+          onChange={(e) => setBoardSearch(e.target.value)}
+          placeholder="Search the board"
+          aria-label="Search the board"
+        />
+      </div>
+
       {isLoading ? (
-        <div className="spinner" />
-      ) : !data?.posts.length ? (
+        <div className="loading-state"><div className="spinner" /><span>Loading the board…</span></div>
+      ) : !visiblePosts.length ? (
         <div className="empty-state">
-          <h3>No posts yet</h3>
-          <p>Be the first to post something anonymously!</p>
+          <div className="empty-state-mark">○</div>
+          <h3>{boardSearch || boardFilter === 'mine' ? 'No posts match this view' : 'The board is quiet'}</h3>
+          <p>{boardSearch || boardFilter === 'mine' ? 'Try another search or switch back to all posts.' : 'Be the first to share something anonymously.'}</p>
         </div>
       ) : (
         <div className="board-list">
-          {data.posts.map((post) => (
+          {visiblePosts.map((post) => (
             <div key={post.id} className="board-card" onClick={() => navigate(`/board/${post.id}`)}>
               <div className="board-card-header">
                 {isAdmin && post.real_name ? (
@@ -168,7 +208,7 @@ export default function BoardPage() {
               )}
               <div className="board-card-footer">
                 <span className="board-comment-count">
-                  💬 {post.comment_count} {Number(post.comment_count) === 1 ? 'comment' : 'comments'}
+                  {post.comment_count} {Number(post.comment_count) === 1 ? 'comment' : 'comments'}
                 </span>
               </div>
             </div>

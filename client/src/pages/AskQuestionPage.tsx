@@ -52,17 +52,21 @@ export default function AskQuestionPage() {
     mutation.mutate({ title: title.trim(), content: message.trim(), image_url: imageUrl });
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit(e as unknown as React.FormEvent);
-    }
-  }
-
   return (
-    <div style={{ maxWidth: '560px', margin: '0 auto' }}>
+    <div className="form-shell">
       <div className="page-header">
-        <h1 className="page-title">New Message to Admin</h1>
+        <div>
+          <span className="eyebrow">Private conversation</span>
+          <h1 className="page-title">Ask a question</h1>
+          <p className="page-lede">Share what you are stuck on and come back here when you are ready to follow the reply.</p>
+        </div>
+      </div>
+      <div className="info-callout">
+        <span className="info-callout-icon" aria-hidden="true">i</span>
+        <div>
+          <strong>Your question is only visible to you and the admin.</strong>
+          <p>Add context, a screenshot, or an example so the reply can be more helpful.</p>
+        </div>
       </div>
       <div className="card">
         {error && <div className="error-msg">{error}</div>}
@@ -87,10 +91,11 @@ export default function AskQuestionPage() {
               className="form-textarea"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your message here… (Enter to send)"
-              style={{ minHeight: '120px' }}
+              placeholder="Explain what you tried and where you got stuck…"
+              maxLength={5000}
+              style={{ minHeight: '170px' }}
             />
+            <div className="field-hint field-hint-right">{message.length}/5000</div>
           </div>
 
           {imageUrl && (
@@ -109,7 +114,7 @@ export default function AskQuestionPage() {
                 disabled={uploading}
                 title="Attach photo"
               >
-                {uploading ? '...' : '📎 Photo'}
+                {uploading ? 'Uploading…' : 'Attach photo'}
               </button>
               <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
             </div>
