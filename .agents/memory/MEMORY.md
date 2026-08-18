@@ -1,0 +1,1 @@
+- [Viewer-specific anonymity](viewer-specific-anonymity.md) — Anonymous ownership labels must be computed server-side per authenticated viewer, never inferred from exposed user IDs in the client.

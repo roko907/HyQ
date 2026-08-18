@@ -8,10 +8,10 @@ interface BoardComment {
   id: number;
   content: string;
   image_url: string | null;
-  user_id: number;
   is_author: boolean;
+  is_mine: boolean;
   is_admin: boolean;
-  anon_num: number;
+  anon_num: number | null;
   real_name: string | null;
   username: string | null;
   created_at: string;
@@ -23,7 +23,7 @@ interface BoardPostDetail {
     title: string;
     content: string;
     image_url: string | null;
-    user_id: number;
+    is_mine: boolean;
     real_name: string | null;
     username: string | null;
     created_at: string;
@@ -40,7 +40,7 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function CommentLabel({ c, isViewerAdmin, isMe }: { c: BoardComment; isViewerAdmin: boolean; isMe: boolean }) {
+function CommentLabel({ c, isViewerAdmin }: { c: BoardComment; isViewerAdmin: boolean }) {
   const nameEl = isViewerAdmin && c.real_name
     ? <span className="board-real-name">{c.real_name}<span className="board-username">@{c.username}</span></span>
     : c.is_author
@@ -51,7 +51,7 @@ function CommentLabel({ c, isViewerAdmin, isMe }: { c: BoardComment; isViewerAdm
     <div className="board-comment-label">
       {nameEl}
       {c.is_admin && <span className="board-badge admin-badge">Admin</span>}
-      {isMe && <span className="board-badge me">You</span>}
+      {c.is_mine && <span className="board-badge me">본인</span>}
     </div>
   );
 }
@@ -71,7 +71,7 @@ export default function BoardPostPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['board-post', id],
+    queryKey: ['board-post', id, currentUser?.id],
     queryFn: async () => {
       const res = await api.get(`/board/${id}`);
       return res.data as BoardPostDetail;
@@ -148,8 +148,7 @@ export default function BoardPostPage() {
   );
 
   const { post, comments } = data;
-  const myId = currentUser?.id;
-  const isMinePost = post.user_id === myId;
+  const isMinePost = post.is_mine;
 
   return (
     <div style={{ maxWidth: '720px', margin: '0 auto' }}>
@@ -196,14 +195,14 @@ export default function BoardPostPage() {
           </div>
         ) : (
           comments.map((c) => {
-            const isMe = c.user_id === myId;
+            const isMe = c.is_mine;
             return (
             <div key={c.id} className={`board-comment ${isMe ? 'is-me' : ''}`}>
               <div className="board-comment-avatar">
                 {c.is_author ? 'A' : `${c.anon_num}`}
               </div>
               <div className="board-comment-body">
-                <CommentLabel c={c} isViewerAdmin={!!isAdmin} isMe={isMe} />
+                <CommentLabel c={c} isViewerAdmin={!!isAdmin} />
                 {c.content && <div className="board-comment-text">{c.content}</div>}
                 {c.image_url && (
                   <div className="msg-image-wrap">

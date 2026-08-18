@@ -12,6 +12,7 @@ interface BoardPost {
   real_name: string | null;
   username: string | null;
   comment_count: number;
+  is_mine: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -42,7 +43,7 @@ export default function BoardPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['board'],
+    queryKey: ['board', currentUser?.id],
     queryFn: async () => {
       const res = await api.get('/board');
       return res.data as { posts: BoardPost[] };
@@ -153,6 +154,8 @@ export default function BoardPage() {
                   <span className="board-real-name">{post.real_name}
                     <span className="board-username">@{post.username}</span>
                   </span>
+                ) : post.is_mine ? (
+                  <span className="board-badge me">본인</span>
                 ) : (
                   <span className="anon-chip">Anonymous</span>
                 )}

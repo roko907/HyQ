@@ -20,7 +20,7 @@ const CommentSchema = z.object({
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(`
-      SELECT p.id, p.title, p.content, p.image_url, p.created_at, p.updated_at,
+      SELECT p.id, p.title, p.content, p.image_url, p.user_id, p.created_at, p.updated_at,
              u.real_name, u.username,
              COUNT(DISTINCT c.id) as comment_count
       FROM board_posts p
@@ -31,9 +31,16 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     `);
 
     const posts = result.rows.map((p) => ({
-      ...p,
+      id: p.id,
+      title: p.title,
+      content: p.content,
+      image_url: p.image_url,
+      created_at: p.created_at,
+      updated_at: p.updated_at,
       real_name: req.isAdmin ? p.real_name : null,
       username: req.isAdmin ? p.username : null,
+      is_mine: String(p.user_id) === String(req.userId),
+      comment_count: p.comment_count,
     }));
 
     return res.json({ posts });
@@ -69,7 +76,18 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       [id]
     );
     if (postResult.rows.length === 0) return res.status(404).json({ error: 'Post not found' });
-    const post = postResult.rows[0];
+    const rawPost = postResult.rows[0];
+    const post = {
+      id: rawPost.id,
+      title: rawPost.title,
+      content: rawPost.content,
+      image_url: rawPost.image_url,
+      created_at: rawPost.created_at,
+      updated_at: rawPost.updated_at,
+      real_name: req.isAdmin ? rawPost.real_name : null,
+      username: req.isAdmin ? rawPost.username : null,
+      is_mine: String(rawPost.user_id) === String(req.userId),
+    };
 
     const commentsResult = await pool.query(
       `SELECT c.id, c.content, c.image_url, c.user_id, c.created_at,
@@ -82,7 +100,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
     // Use string keys throughout to avoid number/string type mismatches
     const meIdStr = String(req.userId);
-    const postAuthorIdStr = String(post.user_id);
+    const postAuthorIdStr = String(rawPost.user_id);
 
     // Build stable anon number map: keyed by string user_id, ordered by first appearance
     const seenUserIds: string[] = [];
@@ -100,8 +118,8 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
         content: c.content,
         image_url: c.image_url,
         created_at: c.created_at,
-        user_id: Number(c.user_id),
         is_author: uid === postAuthorIdStr,
+        is_mine: uid === meIdStr,
         is_admin: !!c.commenter_is_admin,
         anon_num: anonMap[uid] ?? null,
         real_name: req.isAdmin ? c.real_name : null,
@@ -111,15 +129,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
     return res.json({
       post: {
-        id: post.id,
-        title: post.title,
-        content: post.content,
-        image_url: post.image_url,
-        user_id: Number(post.user_id),
-        created_at: post.created_at,
-        updated_at: post.updated_at,
-        real_name: req.isAdmin ? post.real_name : null,
-        username: req.isAdmin ? post.username : null,
+        ...post,
       },
       comments,
     });
@@ -174,8 +184,8 @@ router.post('/:id/comments', async (req: AuthRequest, res: Response) => {
     return res.status(201).json({
       comment: {
         ...result.rows[0],
-        user_id: Number(req.userId),
         is_author: String(req.userId) === String(post.user_id),
+        is_mine: true,
         is_admin: !!req.isAdmin,
         anon_num: anonNum,
         real_name: req.isAdmin ? me.real_name : null,
@@ -194,7 +204,9 @@ router.delete('/:postId/comments/:commentId', async (req: AuthRequest, res: Resp
     const { commentId } = req.params;
     const comment = await pool.query('SELECT user_id FROM board_comments WHERE id = $1', [commentId]);
     if (comment.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-    if (!req.isAdmin && comment.rows[0].user_id !== req.userId) return res.status(403).json({ error: 'Forbidden' });
+    if (!req.isAdmin && String(comment.rows[0].user_id) !== String(req.userId)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     await pool.query('DELETE FROM board_comments WHERE id = $1', [commentId]);
     return res.json({ success: true });
   } catch (err) {
