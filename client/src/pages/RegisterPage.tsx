@@ -18,7 +18,7 @@ export default function RegisterPage() {
     try {
       const res = await api.post('/auth/register', { username, real_name: realName, password });
       setAuth(res.data.token, res.data.user);
-      navigate('/questions');
+      navigate('/board');
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } };
       setError(e.response?.data?.error || 'Registration failed');

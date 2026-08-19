@@ -105,12 +105,12 @@ export default function QuestionsPage() {
     <div className="workspace-shell">
       <section className="workspace-hero">
         <div>
-          <span className="eyebrow">{isAdmin ? 'Support workspace' : 'Private learning inbox'}</span>
-          <h1>{isAdmin ? 'Conversation desk' : `Welcome back, ${firstName}`}</h1>
+          <span className="eyebrow">{isAdmin ? 'Support workspace' : `Welcome back, ${firstName}`}</span>
+          <h1>문의 게시판</h1>
           <p>
             {isAdmin
-              ? 'Keep every student conversation clear, focused, and moving forward.'
-              : 'Ask freely, keep your questions together, and return when you are ready.'}
+              ? 'Review student inquiries and keep every response clear and helpful.'
+              : '문의 내용을 남기고 답변을 한곳에서 확인하세요.'}
           </p>
         </div>
         {!isAdmin && (
@@ -123,7 +123,7 @@ export default function QuestionsPage() {
 
       <section className="overview-grid" aria-label="Question summary">
         <div className="overview-card overview-card-accent">
-          <span className="overview-label">{isAdmin ? 'Total conversations' : 'Total questions'}</span>
+           <span className="overview-label">{isAdmin ? 'Total inquiries' : 'My inquiries'}</span>
           <strong>{data?.total ?? '—'}</strong>
           <span className="overview-detail">Your learning history</span>
         </div>
@@ -147,10 +147,10 @@ export default function QuestionsPage() {
             </div>
             <div>
               <div className="chat-header-name">
-                {isAdmin ? 'All Conversations' : 'My Questions'}
+                 {isAdmin ? 'All Inquiries' : 'My Inquiries'}
               </div>
               <div className="chat-header-sub">
-                {data ? `${filteredQuestions.length} shown` : 'Loading conversations…'}
+                 {data ? `${filteredQuestions.length} shown` : 'Loading inquiries…'}
               </div>
             </div>
           </div>
@@ -194,7 +194,7 @@ export default function QuestionsPage() {
 
         <div className="chat-body">
           {isLoading ? (
-            <div className="loading-state"><div className="spinner" /><span>Loading your conversations…</span></div>
+             <div className="loading-state"><div className="spinner" /><span>Loading inquiries…</span></div>
           ) : !filteredQuestions.length ? (
             <div className="empty-state">
               <div className="empty-state-mark">Q</div>
@@ -206,7 +206,7 @@ export default function QuestionsPage() {
                     ? 'You are all caught up for now.'
                     : !isAdmin
                       ? 'Start with a question and build your learning history.'
-                      : 'New student conversations will appear here.'}
+                       : 'New student inquiries will appear here.'}
               </p>
               {!search && !isAdmin && filter === 'all' && (
                 <Link to="/ask" className="btn btn-primary" style={{ marginTop: '1rem' }}>Ask your first question</Link>

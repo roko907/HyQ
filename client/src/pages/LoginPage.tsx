@@ -17,7 +17,7 @@ export default function LoginPage() {
     try {
       const res = await api.post('/auth/login', { username, password });
       setAuth(res.data.token, res.data.user);
-      navigate('/questions');
+      navigate('/board');
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } };
       setError(e.response?.data?.error || 'Login failed');

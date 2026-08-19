@@ -202,10 +202,6 @@ export default function BoardPage() {
                 <span className="board-time">{timeAgo(post.updated_at)}</span>
               </div>
               <div className="board-card-title">{post.title}</div>
-              <div className="board-card-excerpt">{post.content}</div>
-              {post.image_url && (
-                <div className="board-card-img"><img src={post.image_url} alt="post" /></div>
-              )}
               <div className="board-card-footer">
                 <span className="board-comment-count">
                   {post.comment_count} {Number(post.comment_count) === 1 ? 'comment' : 'comments'}
